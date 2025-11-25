@@ -18,8 +18,8 @@ export const initDatabase = async () => {
     await sequelize.authenticate();
     console.log('DB connected (MySQL)');
 
-    await sequelize.sync({ alter: true });
-    console.log('DB synced');
+    //await sequelize.sync({ alter: true });
+    //console.log('DB synced');
   } catch (error) {
     console.error('DB connection error:', error);
     process.exit(1);
