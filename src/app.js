@@ -1,27 +1,27 @@
 import express from 'express';
 import cors from 'cors';
-import path from 'path';
-import { fileURLToPath } from 'url';
 
 import artistRoutes from './routes/artist.routes.js';
 import musicRoutes from './routes/music.routes.js';
 import { errorHandler } from './middlewares/error.middleware.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
 export const createApp = () => {
-    const app = express();
+  const app = express();
 
-    app.use(cors());
-    app.use(express.json());
+  app.use(cors());
 
-    app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
+  // JSON (auth, CRUD classiques)
+  app.use(express.json());
 
-    app.use('/api/artists', artistRoutes);
-    app.use('/api/musics', musicRoutes);
+  // Form-data (utile avec Multer)
+  app.use(express.urlencoded({ extended: true }));
 
-    app.use(errorHandler);
+  // Routes API
+  app.use('/api/artists', artistRoutes);
+  app.use('/api/musics', musicRoutes);
+
+  // Middleware d’erreur global (à placer toujours en dernier)
+  app.use(errorHandler);
 
   return app;
-}
+};

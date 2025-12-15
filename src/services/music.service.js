@@ -1,10 +1,10 @@
-import fs from 'fs/promises';
 import { musicRepository } from '../repositories/music.repository.js';
 import { Artist } from '../models/artist.model.js';
+import { uploadClient } from '../clients/upload.client.js';
 
 export const musicService = {
   async createMusic(data, file) {
-    if (!file) {
+    if (!file || !file.buffer) {
       const error = new Error('Aucun fichier audio fourni.');
       error.statusCode = 400;
       throw error;
@@ -25,15 +25,32 @@ export const musicService = {
       throw error;
     }
 
-    const music = await musicRepository.create({
+    // Upload vers le microservice FILE
+    const uploaded = await uploadClient.uploadFile({
+      buffer: file.buffer,
+      originalName: file.originalname,
+      mimeType: file.mimetype,
+      folder: 'musics',
+      type: 'audio',
+    });
+
+    const payload = {
       title: data.title,
       artistId,
       album: data.album ?? null,
       duration: data.duration ?? null,
-      filePath: file.path,
-      mimeType: file.mimetype,
-      size: file.size,
-    });
+
+      // FILES renvoie maintenant `path` (et pas `filePath`)
+      filePath: uploaded.path,
+      mimeType: uploaded.mimeType,
+      size: uploaded.size,
+    };
+
+    // Si ton modèle Music a déjà ces champs, on les remplit (sinon ignorés par Sequelize si non définis)
+    if (uploaded.id) payload.fileAssetId = uploaded.id;
+    if (uploaded.url) payload.fileUrl = uploaded.url;
+
+    const music = await musicRepository.create(payload);
 
     return music;
   },
@@ -53,9 +70,8 @@ export const musicService = {
   },
 
   async updateMusic(id, data, file) {
-    const music = await this.getMusicById(id); //-> sort en 404 automatiquement si aucun enregistrement trouvé en DB
+    const music = await this.getMusicById(id);
 
-    // on garde l’ancien chemin pour supprimer le vieux fichier si remplacé
     const oldFilePath = music.filePath;
 
     // artist_id optionnel mais si présent => on vérifie l’artiste
@@ -74,15 +90,27 @@ export const musicService = {
     music.album = data.album ?? music.album;
     music.duration = data.duration ?? music.duration;
 
-    if (file) {
-      music.filePath = file.path;
-      music.mimeType = file.mimetype;
-      music.size = file.size;
+    // Si nouveau fichier : upload vers FILE + suppression ancien fichier via FILE
+    if (file && file.buffer) {
+      const uploaded = await uploadClient.uploadFile({
+        buffer: file.buffer,
+        originalName: file.originalname,
+        mimeType: file.mimetype,
+        folder: 'musics',
+        type: 'audio',
+      });
 
-      // suppression de l’ancien fichier
-      if (oldFilePath && oldFilePath !== file.path) {
+      music.filePath = uploaded.path;
+      music.mimeType = uploaded.mimeType;
+      music.size = uploaded.size;
+
+      // Si tu as ces champs côté modèle
+      if (uploaded.id) music.fileAssetId = uploaded.id;
+      if (uploaded.url) music.fileUrl = uploaded.url;
+
+      if (oldFilePath && oldFilePath !== uploaded.path) {
         try {
-          await fs.unlink(oldFilePath);
+          await uploadClient.deleteFile({ filePath: oldFilePath });
         } catch (err) {
           console.warn('Impossible de supprimer l’ancien fichier :', err.message);
         }
@@ -101,7 +129,7 @@ export const musicService = {
 
     if (filePath) {
       try {
-        await fs.unlink(filePath);
+        await uploadClient.deleteFile({ filePath });
       } catch (err) {
         console.warn('Impossible de supprimer le fichier :', err.message);
       }

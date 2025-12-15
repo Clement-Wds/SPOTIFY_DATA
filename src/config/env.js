@@ -6,6 +6,9 @@ export const env = {
   nodeEnv: process.env.NODE_ENV,
   authServiceUrl : process.env.AUTH_SERVICE_URL,
   authServiceToken: process.env.AUTH_SERVICE_TOKEN,
+  uploadServiceUrl: process.env.UPLOAD_SERVICE_URL,
+  uploadServiceToken: process.env.UPLOAD_SERVICE_TOKEN,
+  uploadMaxSize: process.env.MAX_FILE_SIZE,
   db: {
     host: process.env.DB_HOST,
     port: process.env.DB_PORT,

@@ -7,8 +7,21 @@ const router = Router();
 
 router.get('/', musicController.findAll);
 router.get('/:id', musicController.findOne);
-router.post('/', authenticate, uploadMusic.single('file'), musicController.create);
-router.put('/:id', authenticate, uploadMusic.single('file'), musicController.update);
+
+router.post(
+  '/',
+  authenticate,
+  uploadMusic.single('file'),
+  musicController.create
+);
+
+router.put(
+  '/:id',
+  authenticate,
+  uploadMusic.single('file'),
+  musicController.update
+);
+
 router.delete('/:id', authenticate, musicController.remove);
 
 export default router;
