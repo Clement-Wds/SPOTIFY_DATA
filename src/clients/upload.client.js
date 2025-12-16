@@ -32,6 +32,21 @@ export const uploadClient = {
     return data;
   },
 
+    async updateFile({ fileId, buffer, originalName, mimeType, folder, type }) {
+    const form = new FormData();
+    form.append('file', buffer, { filename: originalName, contentType: mimeType });
+    if (folder) form.append('folder', folder);
+    if (type) form.append('type', type);
+
+    const { data } = await axios.put(`${env.uploadServiceUrl}/api/files/${fileId}`, form, {
+      headers: { ...form.getHeaders(), 'x-service-token': env.uploadServiceToken },
+      maxBodyLength: Infinity,
+      maxContentLength: Infinity,
+    });
+
+    return data;
+  },
+
   async deleteFile({ filePath }) {
     if (!env.uploadServiceUrl) throw new Error('uploadServiceUrl manquant');
     if (!env.uploadServiceToken) throw new Error('uploadServiceToken manquant');

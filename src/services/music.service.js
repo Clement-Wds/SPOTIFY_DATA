@@ -11,7 +11,6 @@ export const musicService = {
     }
 
     const artistId = data.artist_id ?? data.artistId;
-
     if (!artistId) {
       const error = new Error('artist_id est obligatoire.');
       error.statusCode = 400;
@@ -25,7 +24,7 @@ export const musicService = {
       throw error;
     }
 
-    // Upload vers le microservice FILE
+    // Upload vers FILE (création d’un asset)
     const uploaded = await uploadClient.uploadFile({
       buffer: file.buffer,
       originalName: file.originalname,
@@ -34,25 +33,28 @@ export const musicService = {
       type: 'audio',
     });
 
+    if (!uploaded?.id) {
+      const error = new Error("Erreur upload FILE: aucun 'id' retourné.");
+      error.statusCode = 502;
+      throw error;
+    }
+
     const payload = {
       title: data.title,
       artistId,
       album: data.album ?? null,
       duration: data.duration ?? null,
-
-      // FILES renvoie maintenant `path` (et pas `filePath`)
-      filePath: uploaded.path,
-      mimeType: uploaded.mimeType,
-      size: uploaded.size,
+      //Nouveau champ en DB DATA
+      fileId: uploaded.id,
     };
 
-    // Si ton modèle Music a déjà ces champs, on les remplit (sinon ignorés par Sequelize si non définis)
-    if (uploaded.id) payload.fileAssetId = uploaded.id;
+    // Optionnel : si tu gardes ces champs dans Music (sinon supprime)
+    if (uploaded.filePath) payload.filePath = uploaded.filePath;
+    if (uploaded.mimeType) payload.mimeType = uploaded.mimeType;
+    if (uploaded.size) payload.size = uploaded.size;
     if (uploaded.url) payload.fileUrl = uploaded.url;
 
-    const music = await musicRepository.create(payload);
-
-    return music;
+    return musicRepository.create(payload);
   },
 
   async getAllMusics() {
@@ -72,8 +74,6 @@ export const musicService = {
   async updateMusic(id, data, file) {
     const music = await this.getMusicById(id);
 
-    const oldFilePath = music.filePath;
-
     // artist_id optionnel mais si présent => on vérifie l’artiste
     const artistId = data.artist_id ?? data.artistId ?? music.artistId;
     if (data.artist_id || data.artistId) {
@@ -85,14 +85,22 @@ export const musicService = {
       }
     }
 
+    // Maj champs musique
     music.title = data.title ?? music.title;
     music.artistId = artistId;
     music.album = data.album ?? music.album;
     music.duration = data.duration ?? music.duration;
 
-    // Si nouveau fichier : upload vers FILE + suppression ancien fichier via FILE
+    // ✅ Remplacement du fichier via FILE (même fileId)
     if (file && file.buffer) {
-      const uploaded = await uploadClient.uploadFile({
+      if (!music.fileId) {
+        const error = new Error("Aucun fileId associé à cette musique, impossible de remplacer le fichier.");
+        error.statusCode = 400;
+        throw error;
+      }
+
+      const updatedFile = await uploadClient.updateFile({
+        fileId: music.fileId,
         buffer: file.buffer,
         originalName: file.originalname,
         mimeType: file.mimetype,
@@ -100,21 +108,11 @@ export const musicService = {
         type: 'audio',
       });
 
-      music.filePath = uploaded.path;
-      music.mimeType = uploaded.mimeType;
-      music.size = uploaded.size;
-
-      // Si tu as ces champs côté modèle
-      if (uploaded.id) music.fileAssetId = uploaded.id;
-      if (uploaded.url) music.fileUrl = uploaded.url;
-
-      if (oldFilePath && oldFilePath !== uploaded.path) {
-        try {
-          await uploadClient.deleteFile({ filePath: oldFilePath });
-        } catch (err) {
-          console.warn('Impossible de supprimer l’ancien fichier :', err.message);
-        }
-      }
+      // Optionnel : mise à jour des metadata locales si tu les gardes en DATA
+      if (updatedFile?.filePath) music.filePath = updatedFile.filePath;
+      if (updatedFile?.mimeType) music.mimeType = updatedFile.mimeType;
+      if (updatedFile?.size) music.size = updatedFile.size;
+      if (updatedFile?.url) music.fileUrl = updatedFile.url;
     }
 
     await music.save();
@@ -123,15 +121,17 @@ export const musicService = {
 
   async deleteMusic(id) {
     const music = await this.getMusicById(id);
-    const filePath = music.filePath;
+
+    const fileId = music.fileId;
 
     await musicRepository.delete(id);
 
-    if (filePath) {
+    // ✅ suppression côté FILE par id (best effort)
+    if (fileId) {
       try {
-        await uploadClient.deleteFile({ filePath });
+        await uploadClient.deleteFileById(fileId);
       } catch (err) {
-        console.warn('Impossible de supprimer le fichier :', err.message);
+        console.warn('Impossible de supprimer le fichier côté FILE :', err.message);
       }
     }
 

@@ -8,6 +8,11 @@ export const Music = sequelize.define('Music', {
     primaryKey: true,
     autoIncrement: true,
   },
+  fileId: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    field: 'file_id',
+  },
   title: {
     type: DataTypes.STRING(255),
     allowNull: false,
@@ -27,7 +32,7 @@ export const Music = sequelize.define('Music', {
   },
   filePath: {
     type: DataTypes.STRING(1024),
-    allowNull: false,
+    allowNull: true,
   },
   mimeType: {
     type: DataTypes.STRING(100),
